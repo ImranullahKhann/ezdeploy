@@ -1,0 +1,2 @@
+# ezdeploy
+A mini vercel
