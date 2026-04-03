@@ -14,15 +14,23 @@ import (
 	"ezdeploy/backend/internal/auth"
 	"ezdeploy/backend/internal/db"
 	"ezdeploy/backend/internal/middleware"
+	"ezdeploy/backend/internal/project"
 )
 
 type Handler struct {
-	pool        *pgxpool.Pool
-	authService *auth.Service
+	pool           *pgxpool.Pool
+	authService    *auth.Service
+	projectService *project.Service
 }
 
 func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 	h := &Handler{pool: pool, authService: authService}
+	
+	projectService, err := project.New(pool)
+	if err == nil {
+		h.projectService = projectService
+	}
+	
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.handleHealth)
 	mux.HandleFunc("/readyz", h.handleReady)
@@ -31,6 +39,11 @@ func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 		mux.HandleFunc("/auth/login", h.handleLogin)
 		mux.Handle("/auth/me", middleware.RequireAuth(authService, http.HandlerFunc(h.handleMe)))
 		mux.Handle("/auth/logout", middleware.RequireAuth(authService, http.HandlerFunc(h.handleLogout)))
+		
+		if h.projectService != nil {
+			mux.Handle("/projects", middleware.RequireAuth(authService, http.HandlerFunc(h.handleProjects)))
+			mux.Handle("/projects/", middleware.RequireAuth(authService, http.HandlerFunc(h.handleProjectByID)))
+		}
 	}
 	return mux
 }
@@ -208,3 +221,246 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
 }
+
+type createProjectRequest struct {
+	Name       string `json:"name"`
+	GitRepoURL string `json:"git_repo_url"`
+	Branch     string `json:"branch"`
+}
+
+type updateProjectRequest struct {
+	Name       string `json:"name"`
+	GitRepoURL string `json:"git_repo_url"`
+	Branch     string `json:"branch"`
+}
+
+type projectResponse struct {
+	Project project.Project `json:"project"`
+}
+
+type projectListResponse struct {
+	Projects []project.Project `json:"projects"`
+}
+
+type projectConfigRequest struct {
+	BuildCmd        *string                `json:"build_cmd,omitempty"`
+	StartCmd        *string                `json:"start_cmd,omitempty"`
+	DockerfilePath  *string                `json:"dockerfile_path,omitempty"`
+	OutputDir       *string                `json:"output_dir,omitempty"`
+	InstallCmd      *string                `json:"install_cmd,omitempty"`
+	Port            *int                   `json:"port,omitempty"`
+	HealthcheckPath *string                `json:"healthcheck_path,omitempty"`
+	EnvVars         map[string]interface{} `json:"env_vars,omitempty"`
+}
+
+type projectConfigResponse struct {
+	Config project.ProjectConfig `json:"config"`
+}
+
+func (h *Handler) handleProjects(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		h.handleListProjects(w, r, user.ID)
+	case http.MethodPost:
+		h.handleCreateProject(w, r, user.ID)
+	default:
+		writeMethodNotAllowed(w, http.MethodGet, http.MethodPost)
+	}
+}
+
+func (h *Handler) handleListProjects(w http.ResponseWriter, r *http.Request, userID string) {
+	projects, err := h.projectService.List(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, projectListResponse{Projects: projects})
+}
+
+func (h *Handler) handleCreateProject(w http.ResponseWriter, r *http.Request, userID string) {
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read request body"})
+		return
+	}
+
+	var req createProjectRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	proj, err := h.projectService.Create(r.Context(), userID, req.Name, req.GitRepoURL, req.Branch)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, projectResponse{Project: proj})
+}
+
+func (h *Handler) handleProjectByID(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/projects/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	projectID := parts[0]
+
+	if len(parts) == 2 && parts[1] == "config" {
+		h.handleProjectConfig(w, r, user.ID, projectID)
+		return
+	}
+
+	if len(parts) > 1 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetProject(w, r, user.ID, projectID)
+	case http.MethodPut:
+		h.handleUpdateProject(w, r, user.ID, projectID)
+	case http.MethodDelete:
+		h.handleDeleteProject(w, r, user.ID, projectID)
+	default:
+		writeMethodNotAllowed(w, http.MethodGet, http.MethodPut, http.MethodDelete)
+	}
+}
+
+func (h *Handler) handleGetProject(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	proj, err := h.projectService.GetByID(r.Context(), userID, projectID)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, projectResponse{Project: proj})
+}
+
+func (h *Handler) handleUpdateProject(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read request body"})
+		return
+	}
+
+	var req updateProjectRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	proj, err := h.projectService.Update(r.Context(), userID, projectID, req.Name, req.GitRepoURL, req.Branch)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, projectResponse{Project: proj})
+}
+
+func (h *Handler) handleDeleteProject(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	if err := h.projectService.Delete(r.Context(), userID, projectID); err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) handleProjectConfig(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	switch r.Method {
+	case http.MethodGet:
+		h.handleGetConfig(w, r, userID, projectID)
+	case http.MethodPut:
+		h.handleUpdateConfig(w, r, userID, projectID)
+	default:
+		writeMethodNotAllowed(w, http.MethodGet, http.MethodPut)
+	}
+}
+
+func (h *Handler) handleGetConfig(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	config, err := h.projectService.GetConfig(r.Context(), userID, projectID)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, projectConfigResponse{Config: config})
+}
+
+func (h *Handler) handleUpdateConfig(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	defer r.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read request body"})
+		return
+	}
+
+	var req projectConfigRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		return
+	}
+
+	config := project.ProjectConfig{
+		ProjectID:       projectID,
+		BuildCmd:        req.BuildCmd,
+		StartCmd:        req.StartCmd,
+		DockerfilePath:  req.DockerfilePath,
+		OutputDir:       req.OutputDir,
+		InstallCmd:      req.InstallCmd,
+		Port:            req.Port,
+		HealthcheckPath: req.HealthcheckPath,
+		EnvVars:         req.EnvVars,
+	}
+
+	config, err = h.projectService.UpdateConfig(r.Context(), userID, projectID, config)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, projectConfigResponse{Config: config})
+}
+
+func handleProjectError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	message := err.Error()
+
+	switch {
+	case errors.Is(err, project.ErrInvalidInput):
+		status = http.StatusBadRequest
+	case errors.Is(err, project.ErrNotFound), errors.Is(err, project.ErrConfigNotFound):
+		status = http.StatusNotFound
+		message = "not found"
+	case errors.Is(err, project.ErrUnauthorized):
+		status = http.StatusForbidden
+		message = "forbidden"
+	}
+
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
