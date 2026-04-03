@@ -1,0 +1,30 @@
+DESIGN_DOC.md
+BUILD_PLAN.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Backend
+backend/bin/
+backend/.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Python
+__pycache__/
+.pytest_cache/
+
+# Go
+*.test
+coverage.out
+
+# Docker
+.docker/

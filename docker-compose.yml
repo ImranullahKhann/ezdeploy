@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ezdeploy}
+      POSTGRES_USER: ${POSTGRES_USER:-ezdeploy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ezdeploy}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ezdeploy} -d ${POSTGRES_DB:-ezdeploy}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      BACKEND_PORT: ${BACKEND_PORT:-8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://ezdeploy:ezdeploy@postgres:5432/ezdeploy?sslmode=disable}
+      SESSION_SECRET: ${SESSION_SECRET:-development-session-secret-change-me}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
