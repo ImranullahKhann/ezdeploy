@@ -23,6 +23,13 @@
     - Internal health checking: automated polling of container endpoints over user-defined bridge networks.
     - Dynamic port allocation system with PostgreSQL-backed reservation.
     - Sanitized container naming for Docker DNS compatibility.
+- Deployment Orchestration UI is implemented:
+    - Dashboard with project-level status summaries and live indicators.
+    - Project Detail page with comprehensive operational view.
+    - Real-time deployment status polling and event history visualization.
+    - Configuration management for Web Services and Static Sites (build/start commands, ports, paths).
+    - Secrets management (Environment Variables) with masked inputs.
+    - One-click deployment triggering and direct access to live URLs.
 
 ## Progress vs Build Plan
 

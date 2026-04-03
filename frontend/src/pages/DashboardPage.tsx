@@ -1,7 +1,62 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { api, Project } from '../api/client';
+import { Link } from 'react-router-dom';
+import { api, Project, Deployment, APIError } from '../api/client';
 import { Navigation } from '../components/Navigation';
-import { APIError } from '../api/client';
+
+function ProjectCard({ project }: { project: Project }) {
+  const [latestDeployment, setLatestDeployment] = useState<Deployment | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadLatestDeployment();
+  }, [project.id]);
+
+  const loadLatestDeployment = async () => {
+    try {
+      const deployments = await api.projects.listDeployments(project.id);
+      if (deployments.length > 0) {
+        setLatestDeployment(deployments[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load deployments', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Link to={`/projects/${project.id}`} className="project-card-link">
+      <div className="project-card clickable">
+        <div className="project-card-header">
+          <h3>{project.name}</h3>
+          <span className={`workload-badge ${project.workload_type}`}>
+            {project.workload_type === 'web_service' ? 'Web Service' : 'Static Site'}
+          </span>
+        </div>
+        
+        <div className="project-details">
+          <p><strong>Repository:</strong> {project.git_repo_url}</p>
+          <p><strong>Branch:</strong> {project.branch}</p>
+        </div>
+
+        <div className="deployment-summary">
+          {loading ? (
+            <p className="status-text">Loading...</p>
+          ) : latestDeployment ? (
+            <div className="status-line">
+              <span className={`status-badge ${latestDeployment.status}`}>
+                {latestDeployment.status}
+              </span>
+              {latestDeployment.status === 'running' && <span className="live-indicator">● Live</span>}
+            </div>
+          ) : (
+            <p className="status-text">No deployments</p>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -50,7 +105,7 @@ export function DashboardPage() {
         formData.branch,
         formData.workloadType
       );
-      setProjects([...projects, newProject]);
+      setProjects([newProject, ...projects]);
       setShowCreateForm(false);
       setFormData({ name: '', gitRepoUrl: '', branch: 'main', workloadType: 'web_service' });
     } catch (err) {
@@ -174,27 +229,7 @@ export function DashboardPage() {
         ) : (
           <div className="projects-list">
             {projects.map((project) => (
-              <div key={project.id} className="project-card">
-                <div className="project-card-header">
-                  <h3>{project.name}</h3>
-                  <span className={`workload-badge ${project.workload_type}`}>
-                    {project.workload_type === 'web_service'
-                      ? 'Web Service'
-                      : 'Static Site'}
-                  </span>
-                </div>
-                <div className="project-details">
-                  <p>
-                    <strong>Repository:</strong> {project.git_repo_url}
-                  </p>
-                  <p>
-                    <strong>Branch:</strong> {project.branch}
-                  </p>
-                  <p className="project-date">
-                    Created {new Date(project.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
+              <ProjectCard key={project.id} project={project} />
             ))}
           </div>
         )}

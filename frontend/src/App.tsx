@@ -5,6 +5,8 @@ import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { DashboardPage } from './pages/DashboardPage';
 
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -18,6 +20,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:id"
+            element={
+              <ProtectedRoute>
+                <ProjectDetailPage />
               </ProtectedRoute>
             }
           />

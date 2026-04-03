@@ -251,7 +251,7 @@ func (s *Service) GetConfig(ctx context.Context, userID, projectID string) (Proj
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ProjectConfig{}, ErrConfigNotFound
+			return ProjectConfig{ProjectID: projectID}, nil
 		}
 		return ProjectConfig{}, fmt.Errorf("get config: %w", err)
 	}
@@ -302,7 +302,7 @@ func (s *Service) GetConfigInternal(ctx context.Context, projectID string) (Proj
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ProjectConfig{}, ErrConfigNotFound
+			return ProjectConfig{ProjectID: projectID}, nil
 		}
 		return ProjectConfig{}, fmt.Errorf("get config internal: %w", err)
 	}

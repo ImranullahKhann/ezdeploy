@@ -329,12 +329,13 @@ func (h *Handler) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/projects/")
-	parts := strings.Split(path, "/")
-	if len(parts) == 0 || parts[0] == "" {
+	path = strings.TrimSuffix(path, "/")
+	if path == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 
+	parts := strings.Split(path, "/")
 	projectID := parts[0]
 
 	if len(parts) == 2 {
@@ -356,10 +357,13 @@ func (h *Handler) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 			}
 			writeMethodNotAllowed(w, http.MethodGet)
 			return
+		default:
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
 		}
 	}
 
-	if len(parts) > 1 {
+	if len(parts) > 2 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
@@ -563,12 +567,13 @@ func (h *Handler) handleDeploymentByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/deployments/")
-	parts := strings.Split(path, "/")
-	if len(parts) == 0 || parts[0] == "" {
+	path = strings.TrimSuffix(path, "/")
+	if path == "" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
 
+	parts := strings.Split(path, "/")
 	deploymentID := parts[0]
 
 	if len(parts) == 2 && parts[1] == "events" {
