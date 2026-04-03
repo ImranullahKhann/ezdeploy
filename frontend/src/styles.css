@@ -1,59 +1,285 @@
-:root {
-  color-scheme: dark;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  background:
-    radial-gradient(circle at top, #1d3557 0%, #0f172a 40%, #020617 100%);
-  color: #e2e8f0;
-}
-
 * {
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
-  margin: 0;
-  min-height: 100%;
-}
-
 body {
-  min-height: 100vh;
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f9fafb;
 }
 
-.shell {
+/* Navigation */
+.navigation {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 1rem 0;
+}
+
+.nav-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-brand {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2rem;
+  align-items: center;
+}
+
+.nav-links a {
+  color: #6b7280;
+  text-decoration: none;
+}
+
+.nav-links a:hover {
+  color: #1a1a1a;
+}
+
+.nav-user {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.nav-user span {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* Auth Pages */
+.auth-container {
   min-height: 100vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 2rem;
 }
 
-.hero {
-  width: min(720px, 100%);
-  padding: 3rem;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 24px;
-  background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 24px 80px rgba(2, 6, 23, 0.45);
+.auth-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
 }
 
-.eyebrow {
-  margin: 0 0 1rem;
-  text-transform: uppercase;
-  letter-spacing: 0.24em;
-  color: #93c5fd;
-  font-size: 0.8rem;
+.auth-card h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
-h1 {
-  margin: 0;
-  font-size: clamp(2.5rem, 5vw, 4.5rem);
-  line-height: 0.95;
+.auth-subtitle {
+  color: #6b7280;
+  margin-bottom: 2rem;
 }
 
-p {
-  max-width: 60ch;
-  line-height: 1.6;
-  color: #cbd5e1;
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
+
+.auth-footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.auth-footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Forms */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.form-group input {
+  padding: 0.625rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-group input:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.form-group small {
+  color: #6b7280;
+  font-size: 0.75rem;
+}
+
+/* Buttons */
+.btn-primary {
+  background: #2563eb;
+  color: white;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.btn-link:hover {
+  text-decoration: underline;
+}
+
+/* Messages */
+.error-message {
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border: 1px solid #fecaca;
+}
+
+/* Dashboard */
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.dashboard-header h1 {
+  font-size: 2rem;
+}
+
+/* Create Project Form */
+.create-project-form {
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.create-project-form h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.create-project-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Projects List */
+.projects-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.project-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.project-card h3 {
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+}
+
+.project-details p {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.project-details strong {
+  color: #1a1a1a;
+}
+
+.project-date {
+  margin-top: 1rem;
+  font-size: 0.75rem !important;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #6b7280;
+}
+
+.empty-state p {
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-hint {
+  font-size: 0.875rem;
+}
+
+/* Loading */
+.loading-container {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #6b7280;
+}
+

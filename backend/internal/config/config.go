@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	AppEnv          string
 	SessionSecret   string
+	CORSOrigins     []string
 }
 
 func Load() (Config, error) {
@@ -24,6 +26,7 @@ func Load() (Config, error) {
 		ShutdownTimeout: 10 * time.Second,
 		AppEnv:          getEnv("APP_ENV", "development"),
 		SessionSecret:   os.Getenv("SESSION_SECRET"),
+		CORSOrigins:     parseCORSOrigins(getEnv("CORS_ORIGINS", "http://localhost:5173")),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -55,4 +58,18 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func parseCORSOrigins(raw string) []string {
+	if raw == "" {
+		return []string{}
+	}
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			origins = append(origins, trimmed)
+		}
+	}
+	return origins
 }

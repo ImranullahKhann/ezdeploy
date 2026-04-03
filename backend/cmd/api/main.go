@@ -15,6 +15,7 @@ import (
 	"ezdeploy/backend/internal/db"
 	"ezdeploy/backend/internal/httpapi"
 	"ezdeploy/backend/internal/logging"
+	"ezdeploy/backend/internal/middleware"
 	"ezdeploy/backend/internal/migrate"
 )
 
@@ -55,9 +56,11 @@ func run(parent context.Context) error {
 	}
 
 	handler := httpapi.New(pool, authService)
+	corsHandler := middleware.CORS(cfg.CORSOrigins)(handler)
+	
 	server := &http.Server{
 		Addr:              ":" + cfg.BackendPort,
-		Handler:           handler,
+		Handler:           corsHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,

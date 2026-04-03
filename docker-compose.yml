@@ -23,6 +23,7 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-8080}
       DATABASE_URL: ${DATABASE_URL:-postgres://ezdeploy:ezdeploy@postgres:5432/ezdeploy?sslmode=disable}
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:

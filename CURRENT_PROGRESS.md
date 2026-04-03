@@ -8,6 +8,8 @@
 - Project management core is implemented: projects and project_configs tables, full CRUD API for projects, configuration management API, ownership validation, and proper error handling.
 - Frontend starter app is in place as a Vite + React + TypeScript shell.
 - Docker Compose and backend validation have passed with the current stack.
+- Frontend foundation is implemented: React Router setup, API client layer, auth context, authentication screens (signup/login), protected routes, navigation, and project management UI (list and create).
+- CORS middleware is implemented: configurable allowed origins, credentials support, preflight handling, and integration with backend server.
 
 ## Progress vs Build Plan
 
@@ -15,4 +17,5 @@
 - Phase 1: complete.
 - Phase 2: complete.
 - Phase 3: complete.
-- Next up: Phase 4 frontend foundation.
+- Phase 4: complete.
+- Next up: Phase 5 deployment model and orchestration skeleton.
