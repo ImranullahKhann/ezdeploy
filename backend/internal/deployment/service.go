@@ -40,13 +40,13 @@ func (s *Service) Create(ctx context.Context, projectID, userID string, commitSH
 		INSERT INTO deployments (id, project_id, git_commit_sha, git_branch, status, created_by_user_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, project_id, git_commit_sha, git_branch, status, source_type, artifact_path, 
-		          runtime_container_id, public_url, created_at, started_at, finished_at, created_by_user_id
+		          runtime_container_id, port, public_url, created_at, started_at, finished_at, created_by_user_id
 	`
 
 	var d Deployment
 	err = s.pool.QueryRow(ctx, query, deploymentID, projectID, commitSHA, branch, StatusQueued, userID).Scan(
 		&d.ID, &d.ProjectID, &d.GitCommitSHA, &d.GitBranch, &d.Status, &d.SourceType, &d.ArtifactPath,
-		&d.RuntimeContainerID, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
+		&d.RuntimeContainerID, &d.Port, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
 	)
 	if err != nil {
 		return Deployment{}, fmt.Errorf("create deployment: %w", err)
@@ -64,7 +64,7 @@ func (s *Service) Create(ctx context.Context, projectID, userID string, commitSH
 func (s *Service) GetByID(ctx context.Context, deploymentID string) (Deployment, error) {
 	query := `
 		SELECT id, project_id, git_commit_sha, git_branch, status, source_type, artifact_path, 
-		       runtime_container_id, public_url, created_at, started_at, finished_at, created_by_user_id
+		       runtime_container_id, port, public_url, created_at, started_at, finished_at, created_by_user_id
 		FROM deployments
 		WHERE id = $1
 	`
@@ -72,7 +72,7 @@ func (s *Service) GetByID(ctx context.Context, deploymentID string) (Deployment,
 	var d Deployment
 	err := s.pool.QueryRow(ctx, query, deploymentID).Scan(
 		&d.ID, &d.ProjectID, &d.GitCommitSHA, &d.GitBranch, &d.Status, &d.SourceType, &d.ArtifactPath,
-		&d.RuntimeContainerID, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
+		&d.RuntimeContainerID, &d.Port, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -87,7 +87,7 @@ func (s *Service) GetByID(ctx context.Context, deploymentID string) (Deployment,
 func (s *Service) ListByProject(ctx context.Context, projectID string) ([]Deployment, error) {
 	query := `
 		SELECT id, project_id, git_commit_sha, git_branch, status, source_type, artifact_path, 
-		       runtime_container_id, public_url, created_at, started_at, finished_at, created_by_user_id
+		       runtime_container_id, port, public_url, created_at, started_at, finished_at, created_by_user_id
 		FROM deployments
 		WHERE project_id = $1
 		ORDER BY created_at DESC
@@ -104,7 +104,7 @@ func (s *Service) ListByProject(ctx context.Context, projectID string) ([]Deploy
 		var d Deployment
 		err := rows.Scan(
 			&d.ID, &d.ProjectID, &d.GitCommitSHA, &d.GitBranch, &d.Status, &d.SourceType, &d.ArtifactPath,
-			&d.RuntimeContainerID, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
+			&d.RuntimeContainerID, &d.Port, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan deployment: %w", err)
@@ -121,6 +121,41 @@ func (s *Service) ListByProject(ctx context.Context, projectID string) ([]Deploy
 	}
 
 	return deployments, nil
+}
+
+func (s *Service) AllocatePort(ctx context.Context, min, max int) (int, error) {
+	// Simple allocator: find first port in range not used by a running deployment
+	query := `
+		SELECT p.port
+		FROM generate_series($1::integer, $2::integer) AS p(port)
+		LEFT JOIN deployments d ON d.port = p.port AND d.status = 'running'
+		WHERE d.port IS NULL
+		LIMIT 1
+	`
+	var port int
+	err := s.pool.QueryRow(ctx, query, min, max).Scan(&port)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, fmt.Errorf("no available ports in range %d-%d", min, max)
+		}
+		return 0, fmt.Errorf("allocate port: %w", err)
+	}
+	return port, nil
+}
+
+func (s *Service) UpdateMetadata(ctx context.Context, deploymentID string, containerID *string, port *int, publicURL *string) error {
+	query := `
+		UPDATE deployments 
+		SET runtime_container_id = COALESCE($2, runtime_container_id),
+		    port = COALESCE($3, port),
+		    public_url = COALESCE($4, public_url)
+		WHERE id = $1
+	`
+	_, err := s.pool.Exec(ctx, query, deploymentID, containerID, port, publicURL)
+	if err != nil {
+		return fmt.Errorf("update deployment metadata: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, deploymentID string, status Status) error {

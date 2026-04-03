@@ -24,8 +24,11 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://ezdeploy:ezdeploy@postgres:5432/ezdeploy?sslmode=disable}
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://frontend:5173}
+      STORAGE_ROOT: /app/data
     ports:
       - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,6 +41,12 @@ services:
       APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: ${DATABASE_URL:-postgres://ezdeploy:ezdeploy@postgres:5432/ezdeploy?sslmode=disable}
       SESSION_SECRET: ${SESSION_SECRET:-development-session-secret-change-me}
+      STORAGE_ROOT: /app/data
+      DOCKER_HOST: unix:///var/run/docker.sock
+      RUNTIME_NETWORK: ezdeploy_default
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy

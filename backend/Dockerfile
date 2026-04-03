@@ -12,6 +12,9 @@ RUN CGO_ENABLED=0 go build -o /out/worker ./cmd/worker
 
 FROM alpine:3.20
 
+# Install git and docker CLI
+RUN apk add --no-cache git docker-cli
+
 WORKDIR /app
 COPY --from=build /out/backend /app/backend
 COPY --from=build /out/worker /app/worker

@@ -265,6 +265,57 @@ func (s *Service) GetConfig(ctx context.Context, userID, projectID string) (Proj
 	return c, nil
 }
 
+func (s *Service) GetByIDInternal(ctx context.Context, projectID string) (Project, error) {
+	query := `
+		SELECT id, name, user_id, git_repo_url, branch, workload_type, slug, deleted_at, created_at, updated_at
+		FROM projects
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	var p Project
+	err := s.pool.QueryRow(ctx, query, projectID).Scan(
+		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.WorkloadType, &p.Slug, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Project{}, ErrNotFound
+		}
+		return Project{}, fmt.Errorf("get project internal: %w", err)
+	}
+
+	return p, nil
+}
+
+func (s *Service) GetConfigInternal(ctx context.Context, projectID string) (ProjectConfig, error) {
+	query := `
+		SELECT project_id, build_cmd, start_cmd, dockerfile_path, output_dir,
+			install_cmd, port, healthcheck_path, env_vars, created_at, updated_at
+		FROM project_configs
+		WHERE project_id = $1
+	`
+
+	var c ProjectConfig
+	var envVarsRaw []byte
+	err := s.pool.QueryRow(ctx, query, projectID).Scan(
+		&c.ProjectID, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
+		&c.InstallCmd, &c.Port, &c.HealthcheckPath, &envVarsRaw, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProjectConfig{}, ErrConfigNotFound
+		}
+		return ProjectConfig{}, fmt.Errorf("get config internal: %w", err)
+	}
+
+	if len(envVarsRaw) > 0 {
+		if err := json.Unmarshal(envVarsRaw, &c.EnvVars); err != nil {
+			return ProjectConfig{}, fmt.Errorf("unmarshal env vars internal: %w", err)
+		}
+	}
+
+	return c, nil
+}
+
 func (s *Service) verifyOwnership(ctx context.Context, userID, projectID string) error {
 	var ownerID string
 	err := s.pool.QueryRow(ctx, "SELECT user_id FROM projects WHERE id = $1 AND deleted_at IS NULL", projectID).Scan(&ownerID)

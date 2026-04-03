@@ -16,6 +16,13 @@
     - Worker process bootstrap with mock deployment execution.
     - Deployment trigger API with project ownership validation.
 - Enhanced project management: added `workload_type` support to projects and project configs, including UI selection and badge display.
+- Web service deployment path is fully functional:
+    - Repository cloning and checkout (Git).
+    - Docker build integration with dynamic image tagging.
+    - Container orchestration: automated launching, network management, and host-port mapping.
+    - Internal health checking: automated polling of container endpoints over user-defined bridge networks.
+    - Dynamic port allocation system with PostgreSQL-backed reservation.
+    - Sanitized container naming for Docker DNS compatibility.
 
 ## Progress vs Build Plan
 
@@ -25,4 +32,5 @@
 - Phase 3: complete.
 - Phase 4: complete.
 - Phase 5: complete.
-- Next up: Phase 6 web service deployment path.
+- Phase 6: complete.
+- Next up: Phase 7 static site deployment path.

@@ -15,7 +15,11 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	AppEnv          string
 	SessionSecret   string
-	CORSOrigins     []string
+	CORSOrigins      []string
+	StorageRoot      string
+	RuntimePortMin   int
+	RuntimePortMax   int
+	RuntimeNetwork   string
 }
 
 func Load() (Config, error) {
@@ -27,6 +31,10 @@ func Load() (Config, error) {
 		AppEnv:          getEnv("APP_ENV", "development"),
 		SessionSecret:   os.Getenv("SESSION_SECRET"),
 		CORSOrigins:     parseCORSOrigins(getEnv("CORS_ORIGINS", "http://localhost:5173")),
+		StorageRoot:     getEnv("STORAGE_ROOT", "data"),
+		RuntimePortMin:  getEnvInt("RUNTIME_PORT_MIN", 10000),
+		RuntimePortMax:  getEnvInt("RUNTIME_PORT_MAX", 20000),
+		RuntimeNetwork:  getEnv("RUNTIME_NETWORK", "bridge"),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -58,6 +66,18 @@ func getEnv(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getEnvInt(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	i, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return i
 }
 
 func parseCORSOrigins(raw string) []string {

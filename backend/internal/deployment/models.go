@@ -27,6 +27,7 @@ type Deployment struct {
 	SourceType         *string    `json:"source_type,omitempty"`
 	ArtifactPath       *string    `json:"artifact_path,omitempty"`
 	RuntimeContainerID *string    `json:"runtime_container_id,omitempty"`
+	Port               *int       `json:"port,omitempty"`
 	PublicURL          *string    `json:"public_url,omitempty"`
 	CreatedAt          time.Time  `json:"created_at"`
 	StartedAt          *time.Time `json:"started_at,omitempty"`
