@@ -24,10 +24,11 @@ func New(pool *pgxpool.Pool) (*Service, error) {
 	return &Service{pool: pool}, nil
 }
 
-func (s *Service) Create(ctx context.Context, userID, name, gitRepoURL, branch string) (Project, error) {
+func (s *Service) Create(ctx context.Context, userID, name, gitRepoURL, branch, workloadType string) (Project, error) {
 	name = strings.TrimSpace(name)
 	gitRepoURL = strings.TrimSpace(gitRepoURL)
 	branch = strings.TrimSpace(branch)
+	workloadType = strings.TrimSpace(workloadType)
 
 	if name == "" {
 		return Project{}, fmt.Errorf("%w: name is required", ErrInvalidInput)
@@ -38,6 +39,9 @@ func (s *Service) Create(ctx context.Context, userID, name, gitRepoURL, branch s
 	if branch == "" {
 		branch = "main"
 	}
+	if workloadType == "" {
+		workloadType = "web_service"
+	}
 
 	projectID, err := newID("prj")
 	if err != nil {
@@ -45,14 +49,14 @@ func (s *Service) Create(ctx context.Context, userID, name, gitRepoURL, branch s
 	}
 
 	query := `
-		INSERT INTO projects (id, name, user_id, git_repo_url, branch)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, name, user_id, git_repo_url, branch, created_at, updated_at
+		INSERT INTO projects (id, name, user_id, git_repo_url, branch, workload_type)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, name, user_id, git_repo_url, branch, workload_type, slug, deleted_at, created_at, updated_at
 	`
 
 	var p Project
-	err = s.pool.QueryRow(ctx, query, projectID, name, userID, gitRepoURL, branch).Scan(
-		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.CreatedAt, &p.UpdatedAt,
+	err = s.pool.QueryRow(ctx, query, projectID, name, userID, gitRepoURL, branch, workloadType).Scan(
+		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.WorkloadType, &p.Slug, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return Project{}, fmt.Errorf("create project: %w", err)
@@ -63,9 +67,9 @@ func (s *Service) Create(ctx context.Context, userID, name, gitRepoURL, branch s
 
 func (s *Service) List(ctx context.Context, userID string) ([]Project, error) {
 	query := `
-		SELECT id, name, user_id, git_repo_url, branch, created_at, updated_at
+		SELECT id, name, user_id, git_repo_url, branch, workload_type, slug, deleted_at, created_at, updated_at
 		FROM projects
-		WHERE user_id = $1
+		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 	`
 
@@ -78,7 +82,7 @@ func (s *Service) List(ctx context.Context, userID string) ([]Project, error) {
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.WorkloadType, &p.Slug, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan project: %w", err)
 		}
 		projects = append(projects, p)
@@ -97,14 +101,14 @@ func (s *Service) List(ctx context.Context, userID string) ([]Project, error) {
 
 func (s *Service) GetByID(ctx context.Context, userID, projectID string) (Project, error) {
 	query := `
-		SELECT id, name, user_id, git_repo_url, branch, created_at, updated_at
+		SELECT id, name, user_id, git_repo_url, branch, workload_type, slug, deleted_at, created_at, updated_at
 		FROM projects
-		WHERE id = $1 AND user_id = $2
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
 	`
 
 	var p Project
 	err := s.pool.QueryRow(ctx, query, projectID, userID).Scan(
-		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.CreatedAt, &p.UpdatedAt,
+		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.WorkloadType, &p.Slug, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -116,10 +120,11 @@ func (s *Service) GetByID(ctx context.Context, userID, projectID string) (Projec
 	return p, nil
 }
 
-func (s *Service) Update(ctx context.Context, userID, projectID, name, gitRepoURL, branch string) (Project, error) {
+func (s *Service) Update(ctx context.Context, userID, projectID, name, gitRepoURL, branch, workloadType string) (Project, error) {
 	name = strings.TrimSpace(name)
 	gitRepoURL = strings.TrimSpace(gitRepoURL)
 	branch = strings.TrimSpace(branch)
+	workloadType = strings.TrimSpace(workloadType)
 
 	if name == "" {
 		return Project{}, fmt.Errorf("%w: name is required", ErrInvalidInput)
@@ -130,17 +135,20 @@ func (s *Service) Update(ctx context.Context, userID, projectID, name, gitRepoUR
 	if branch == "" {
 		return Project{}, fmt.Errorf("%w: branch is required", ErrInvalidInput)
 	}
+	if workloadType == "" {
+		return Project{}, fmt.Errorf("%w: workload_type is required", ErrInvalidInput)
+	}
 
 	query := `
 		UPDATE projects
-		SET name = $3, git_repo_url = $4, branch = $5, updated_at = NOW()
-		WHERE id = $1 AND user_id = $2
-		RETURNING id, name, user_id, git_repo_url, branch, created_at, updated_at
+		SET name = $3, git_repo_url = $4, branch = $5, workload_type = $6, updated_at = NOW()
+		WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		RETURNING id, name, user_id, git_repo_url, branch, workload_type, slug, deleted_at, created_at, updated_at
 	`
 
 	var p Project
-	err := s.pool.QueryRow(ctx, query, projectID, userID, name, gitRepoURL, branch).Scan(
-		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.CreatedAt, &p.UpdatedAt,
+	err := s.pool.QueryRow(ctx, query, projectID, userID, name, gitRepoURL, branch, workloadType).Scan(
+		&p.ID, &p.Name, &p.UserID, &p.GitRepoURL, &p.Branch, &p.WorkloadType, &p.Slug, &p.DeletedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -153,7 +161,8 @@ func (s *Service) Update(ctx context.Context, userID, projectID, name, gitRepoUR
 }
 
 func (s *Service) Delete(ctx context.Context, userID, projectID string) error {
-	query := `DELETE FROM projects WHERE id = $1 AND user_id = $2`
+	// Soft delete for the MVP
+	query := `UPDATE projects SET deleted_at = NOW() WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`
 
 	result, err := s.pool.Exec(ctx, query, projectID, userID)
 	if err != nil {
@@ -258,7 +267,7 @@ func (s *Service) GetConfig(ctx context.Context, userID, projectID string) (Proj
 
 func (s *Service) verifyOwnership(ctx context.Context, userID, projectID string) error {
 	var ownerID string
-	err := s.pool.QueryRow(ctx, "SELECT user_id FROM projects WHERE id = $1", projectID).Scan(&ownerID)
+	err := s.pool.QueryRow(ctx, "SELECT user_id FROM projects WHERE id = $1 AND deleted_at IS NULL", projectID).Scan(&ownerID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrNotFound

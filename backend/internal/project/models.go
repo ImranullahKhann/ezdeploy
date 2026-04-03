@@ -3,13 +3,16 @@ package project
 import "time"
 
 type Project struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	UserID     string    `json:"user_id"`
-	GitRepoURL string    `json:"git_repo_url"`
-	Branch     string    `json:"branch"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	UserID       string     `json:"user_id"`
+	GitRepoURL   string     `json:"git_repo_url"`
+	Branch       string     `json:"branch"`
+	WorkloadType string     `json:"workload_type"`
+	Slug         *string    `json:"slug,omitempty"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 type ProjectConfig struct {

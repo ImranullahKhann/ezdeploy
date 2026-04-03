@@ -14,6 +14,7 @@ export function DashboardPage() {
     name: '',
     gitRepoUrl: '',
     branch: 'main',
+    workloadType: 'web_service' as const,
   });
 
   useEffect(() => {
@@ -46,11 +47,12 @@ export function DashboardPage() {
       const newProject = await api.projects.create(
         formData.name,
         formData.gitRepoUrl,
-        formData.branch
+        formData.branch,
+        formData.workloadType
       );
       setProjects([...projects, newProject]);
       setShowCreateForm(false);
-      setFormData({ name: '', gitRepoUrl: '', branch: 'main' });
+      setFormData({ name: '', gitRepoUrl: '', branch: 'main', workloadType: 'web_service' });
     } catch (err) {
       if (err instanceof APIError) {
         setCreateError(err.message);
@@ -130,6 +132,25 @@ export function DashboardPage() {
                 />
               </div>
 
+              <div className="form-group">
+                <label htmlFor="workloadType">Workload Type</label>
+                <select
+                  id="workloadType"
+                  value={formData.workloadType}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      workloadType: e.target.value as any,
+                    })
+                  }
+                  required
+                  disabled={creating}
+                >
+                  <option value="web_service">Web Service</option>
+                  <option value="static_site">Static Site</option>
+                </select>
+              </div>
+
               <button type="submit" disabled={creating} className="btn-primary">
                 {creating ? 'Creating...' : 'Create Project'}
               </button>
@@ -154,7 +175,14 @@ export function DashboardPage() {
           <div className="projects-list">
             {projects.map((project) => (
               <div key={project.id} className="project-card">
-                <h3>{project.name}</h3>
+                <div className="project-card-header">
+                  <h3>{project.name}</h3>
+                  <span className={`workload-badge ${project.workload_type}`}>
+                    {project.workload_type === 'web_service'
+                      ? 'Web Service'
+                      : 'Static Site'}
+                  </span>
+                </div>
                 <div className="project-details">
                   <p>
                     <strong>Repository:</strong> {project.git_repo_url}
@@ -170,6 +198,7 @@ export function DashboardPage() {
             ))}
           </div>
         )}
+
       </main>
     </>
   );

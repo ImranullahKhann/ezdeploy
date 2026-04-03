@@ -8,11 +8,13 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 go build -o /out/backend ./cmd/api
+RUN CGO_ENABLED=0 go build -o /out/worker ./cmd/worker
 
 FROM alpine:3.20
 
 WORKDIR /app
 COPY --from=build /out/backend /app/backend
+COPY --from=build /out/worker /app/worker
 COPY --from=build /src/migrations /app/migrations
 
 EXPOSE 8080

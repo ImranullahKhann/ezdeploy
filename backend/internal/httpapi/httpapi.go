@@ -13,6 +13,7 @@ import (
 
 	"ezdeploy/backend/internal/auth"
 	"ezdeploy/backend/internal/db"
+	"ezdeploy/backend/internal/deployment"
 	"ezdeploy/backend/internal/middleware"
 	"ezdeploy/backend/internal/project"
 )
@@ -21,6 +22,7 @@ type Handler struct {
 	pool           *pgxpool.Pool
 	authService    *auth.Service
 	projectService *project.Service
+	deployService  *deployment.Service
 }
 
 func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
@@ -29,6 +31,11 @@ func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 	projectService, err := project.New(pool)
 	if err == nil {
 		h.projectService = projectService
+	}
+
+	deployService, err := deployment.New(pool)
+	if err == nil {
+		h.deployService = deployService
 	}
 	
 	mux := http.NewServeMux()
@@ -43,6 +50,10 @@ func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 		if h.projectService != nil {
 			mux.Handle("/projects", middleware.RequireAuth(authService, http.HandlerFunc(h.handleProjects)))
 			mux.Handle("/projects/", middleware.RequireAuth(authService, http.HandlerFunc(h.handleProjectByID)))
+		}
+
+		if h.deployService != nil {
+			mux.Handle("/deployments/", middleware.RequireAuth(authService, http.HandlerFunc(h.handleDeploymentByID)))
 		}
 	}
 	return mux
@@ -223,15 +234,17 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 type createProjectRequest struct {
-	Name       string `json:"name"`
-	GitRepoURL string `json:"git_repo_url"`
-	Branch     string `json:"branch"`
+	Name         string `json:"name"`
+	GitRepoURL   string `json:"git_repo_url"`
+	Branch       string `json:"branch"`
+	WorkloadType string `json:"workload_type"`
 }
 
 type updateProjectRequest struct {
-	Name       string `json:"name"`
-	GitRepoURL string `json:"git_repo_url"`
-	Branch     string `json:"branch"`
+	Name         string `json:"name"`
+	GitRepoURL   string `json:"git_repo_url"`
+	Branch       string `json:"branch"`
+	WorkloadType string `json:"workload_type"`
 }
 
 type projectResponse struct {
@@ -299,7 +312,7 @@ func (h *Handler) handleCreateProject(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 
-	proj, err := h.projectService.Create(r.Context(), userID, req.Name, req.GitRepoURL, req.Branch)
+	proj, err := h.projectService.Create(r.Context(), userID, req.Name, req.GitRepoURL, req.Branch, req.WorkloadType)
 	if err != nil {
 		handleProjectError(w, err)
 		return
@@ -324,9 +337,26 @@ func (h *Handler) handleProjectByID(w http.ResponseWriter, r *http.Request) {
 
 	projectID := parts[0]
 
-	if len(parts) == 2 && parts[1] == "config" {
-		h.handleProjectConfig(w, r, user.ID, projectID)
-		return
+	if len(parts) == 2 {
+		switch parts[1] {
+		case "config":
+			h.handleProjectConfig(w, r, user.ID, projectID)
+			return
+		case "deploy":
+			if r.Method == http.MethodPost {
+				h.handleDeployProject(w, r, user.ID, projectID)
+				return
+			}
+			writeMethodNotAllowed(w, http.MethodPost)
+			return
+		case "deployments":
+			if r.Method == http.MethodGet {
+				h.handleListDeployments(w, r, user.ID, projectID)
+				return
+			}
+			writeMethodNotAllowed(w, http.MethodGet)
+			return
+		}
 	}
 
 	if len(parts) > 1 {
@@ -371,7 +401,7 @@ func (h *Handler) handleUpdateProject(w http.ResponseWriter, r *http.Request, us
 		return
 	}
 
-	proj, err := h.projectService.Update(r.Context(), userID, projectID, req.Name, req.GitRepoURL, req.Branch)
+	proj, err := h.projectService.Update(r.Context(), userID, projectID, req.Name, req.GitRepoURL, req.Branch, req.WorkloadType)
 	if err != nil {
 		handleProjectError(w, err)
 		return
@@ -445,6 +475,170 @@ func (h *Handler) handleUpdateConfig(w http.ResponseWriter, r *http.Request, use
 
 	writeJSON(w, http.StatusOK, projectConfigResponse{Config: config})
 }
+
+type deployProjectRequest struct {
+	CommitSHA string `json:"commit_sha"`
+	Branch    string `json:"branch"`
+}
+
+type deploymentResponse struct {
+	Deployment deployment.Deployment `json:"deployment"`
+}
+
+type deploymentListResponse struct {
+	Deployments []deployment.Deployment `json:"deployments"`
+}
+
+type eventListResponse struct {
+	Events []deployment.DeploymentEvent `json:"events"`
+}
+
+func (h *Handler) handleDeployProject(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	// Verify project ownership
+	proj, err := h.projectService.GetByID(r.Context(), userID, projectID)
+	if err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	var req deployProjectRequest
+	if r.Body != http.NoBody {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+			return
+		}
+	}
+
+	branch := req.Branch
+	if branch == "" {
+		branch = proj.Branch
+	}
+
+	var commitSHAPtr *string
+	if req.CommitSHA != "" {
+		commitSHAPtr = &req.CommitSHA
+	}
+
+	// Create deployment record
+	dep, err := h.deployService.Create(r.Context(), projectID, userID, commitSHAPtr, &branch)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Enqueue job
+	_, err = h.deployService.EnqueueJob(r.Context(), "deploy", map[string]any{
+		"deployment_id": dep.ID,
+		"project_id":    projectID,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, deploymentResponse{Deployment: dep})
+}
+
+func (h *Handler) handleListDeployments(w http.ResponseWriter, r *http.Request, userID, projectID string) {
+	// Verify project ownership
+	if _, err := h.projectService.GetByID(r.Context(), userID, projectID); err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	deployments, err := h.deployService.ListByProject(r.Context(), projectID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, deploymentListResponse{Deployments: deployments})
+}
+
+func (h *Handler) handleDeploymentByID(w http.ResponseWriter, r *http.Request) {
+	user, ok := middleware.UserFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/deployments/")
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	deploymentID := parts[0]
+
+	if len(parts) == 2 && parts[1] == "events" {
+		if r.Method == http.MethodGet {
+			h.handleListDeploymentEvents(w, r, user.ID, deploymentID)
+			return
+		}
+		writeMethodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	if len(parts) > 1 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		h.handleGetDeployment(w, r, user.ID, deploymentID)
+		return
+	}
+
+	writeMethodNotAllowed(w, http.MethodGet)
+}
+
+func (h *Handler) handleGetDeployment(w http.ResponseWriter, r *http.Request, userID, deploymentID string) {
+	dep, err := h.deployService.GetByID(r.Context(), deploymentID)
+	if err != nil {
+		if errors.Is(err, deployment.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Verify project ownership
+	if _, err := h.projectService.GetByID(r.Context(), userID, dep.ProjectID); err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, deploymentResponse{Deployment: dep})
+}
+
+func (h *Handler) handleListDeploymentEvents(w http.ResponseWriter, r *http.Request, userID, deploymentID string) {
+	dep, err := h.deployService.GetByID(r.Context(), deploymentID)
+	if err != nil {
+		if errors.Is(err, deployment.ErrNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Verify project ownership
+	if _, err := h.projectService.GetByID(r.Context(), userID, dep.ProjectID); err != nil {
+		handleProjectError(w, err)
+		return
+	}
+
+	events, err := h.deployService.ListEvents(r.Context(), deploymentID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, eventListResponse{Events: events})
+}
+
 
 func handleProjectError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError

@@ -30,6 +30,18 @@ services:
       postgres:
         condition: service_healthy
 
+  worker:
+    build:
+      context: ./backend
+    command: ["/app/worker"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL:-postgres://ezdeploy:ezdeploy@postgres:5432/ezdeploy?sslmode=disable}
+      SESSION_SECRET: ${SESSION_SECRET:-development-session-secret-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

@@ -10,6 +10,12 @@
 - Docker Compose and backend validation have passed with the current stack.
 - Frontend foundation is implemented: React Router setup, API client layer, auth context, authentication screens (signup/login), protected routes, navigation, and project management UI (list and create).
 - CORS middleware is implemented: configurable allowed origins, credentials support, preflight handling, and integration with backend server.
+- Deployment model and orchestration skeleton are implemented:
+    - Deployments and deployment events schema and state machine.
+    - Internal job queue with claiming, completion, and failure handling.
+    - Worker process bootstrap with mock deployment execution.
+    - Deployment trigger API with project ownership validation.
+- Enhanced project management: added `workload_type` support to projects and project configs, including UI selection and badge display.
 
 ## Progress vs Build Plan
 
@@ -18,4 +24,5 @@
 - Phase 2: complete.
 - Phase 3: complete.
 - Phase 4: complete.
-- Next up: Phase 5 deployment model and orchestration skeleton.
+- Phase 5: complete.
+- Next up: Phase 6 web service deployment path.

@@ -6,12 +6,16 @@ export interface User {
   created_at: string;
 }
 
+export type WorkloadType = 'web_service' | 'static_site';
+
 export interface Project {
   id: string;
   user_id: string;
   name: string;
   git_repo_url: string;
   branch: string;
+  workload_type: WorkloadType;
+  slug?: string;
   created_at: string;
   updated_at: string;
 }
@@ -30,6 +34,41 @@ export interface ProjectConfig {
   updated_at: string;
 }
 
+export type DeploymentStatus = 
+  | 'queued' 
+  | 'building' 
+  | 'build_failed' 
+  | 'deploying' 
+  | 'running' 
+  | 'failed' 
+  | 'stopped' 
+  | 'rolled_back';
+
+export interface Deployment {
+  id: string;
+  project_id: string;
+  git_commit_sha?: string;
+  git_branch?: string;
+  status: DeploymentStatus;
+  source_type?: string;
+  artifact_path?: string;
+  runtime_container_id?: string;
+  public_url?: string;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+  created_by_user_id?: string;
+}
+
+export interface DeploymentEvent {
+  id: string;
+  deployment_id: string;
+  event_type: string;
+  message: string;
+  timestamp: string;
+  metadata_json?: any;
+}
+
 interface AuthResponse {
   user: User;
 }
@@ -44,6 +83,18 @@ interface ProjectListResponse {
 
 interface ProjectConfigResponse {
   config: ProjectConfig;
+}
+
+interface DeploymentResponse {
+  deployment: Deployment;
+}
+
+interface DeploymentListResponse {
+  deployments: Deployment[];
+}
+
+interface EventListResponse {
+  events: DeploymentEvent[];
 }
 
 class APIError extends Error {
@@ -121,10 +172,15 @@ export const api = {
       return response.project;
     },
 
-    create: async (name: string, gitRepoUrl: string, branch: string): Promise<Project> => {
+    create: async (name: string, gitRepoUrl: string, branch: string, workloadType: WorkloadType): Promise<Project> => {
       const response = await fetchJSON<ProjectResponse>('/projects', {
         method: 'POST',
-        body: JSON.stringify({ name, git_repo_url: gitRepoUrl, branch }),
+        body: JSON.stringify({ 
+          name, 
+          git_repo_url: gitRepoUrl, 
+          branch,
+          workload_type: workloadType
+        }),
       });
       return response.project;
     },
@@ -133,11 +189,17 @@ export const api = {
       id: string,
       name: string,
       gitRepoUrl: string,
-      branch: string
+      branch: string,
+      workloadType: WorkloadType
     ): Promise<Project> => {
       const response = await fetchJSON<ProjectResponse>(`/projects/${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, git_repo_url: gitRepoUrl, branch }),
+        body: JSON.stringify({ 
+          name, 
+          git_repo_url: gitRepoUrl, 
+          branch,
+          workload_type: workloadType
+        }),
       });
       return response.project;
     },
@@ -157,6 +219,31 @@ export const api = {
         body: JSON.stringify(config),
       });
       return response.config;
+    },
+
+    deploy: async (id: string, commitSha?: string, branch?: string): Promise<Deployment> => {
+      const response = await fetchJSON<DeploymentResponse>(`/projects/${id}/deploy`, {
+        method: 'POST',
+        body: JSON.stringify({ commit_sha: commitSha, branch }),
+      });
+      return response.deployment;
+    },
+
+    listDeployments: async (id: string): Promise<Deployment[]> => {
+      const response = await fetchJSON<DeploymentListResponse>(`/projects/${id}/deployments`);
+      return response.deployments;
+    },
+  },
+
+  deployments: {
+    get: async (id: string): Promise<Deployment> => {
+      const response = await fetchJSON<DeploymentResponse>(`/deployments/${id}`);
+      return response.deployment;
+    },
+
+    listEvents: async (id: string): Promise<DeploymentEvent[]> => {
+      const response = await fetchJSON<EventListResponse>(`/deployments/${id}/events`);
+      return response.events;
     },
   },
 };
