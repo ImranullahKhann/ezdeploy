@@ -1,6 +1,6 @@
 # ezdeploy
 
-ezdeploy is a portfolio-grade hosting platform for web services and static sites.
+ezdeploy is a hosting platform for web services and static sites.
 
 ## Repository layout
 
