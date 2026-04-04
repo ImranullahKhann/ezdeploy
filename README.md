@@ -8,7 +8,6 @@ ezdeploy is a hosting platform for web services and static sites.
 - `frontend/` React application.
 - `infra/` local development and deployment infrastructure.
 - `docs/` design notes and supporting documentation.
-- `scripts/` developer helper scripts.
 - `.github/` CI and repository automation.
 
 ## Local development
