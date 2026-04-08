@@ -17,6 +17,7 @@ type Project struct {
 
 type ProjectConfig struct {
 	ProjectID       string                 `json:"project_id"`
+	BuildMethod     string                 `json:"build_method"`
 	BuildCmd        *string                `json:"build_cmd,omitempty"`
 	StartCmd        *string                `json:"start_cmd,omitempty"`
 	DockerfilePath  *string                `json:"dockerfile_path,omitempty"`

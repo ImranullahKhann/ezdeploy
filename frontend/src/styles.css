@@ -523,3 +523,57 @@ body {
   color: #6b7280;
 }
 
+
+/* Radio Group Styles */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.radio-option {
+  display: flex;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.radio-option:hover {
+  border-color: #3b82f6;
+  background: #f9fafb;
+}
+
+.radio-option input[type='radio'] {
+  margin-top: 0.125rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+.radio-option input[type='radio']:checked + span {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.radio-option span {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.radio-option small {
+  display: block;
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+

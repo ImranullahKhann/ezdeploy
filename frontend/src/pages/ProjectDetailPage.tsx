@@ -45,6 +45,11 @@ export function ProjectDetailPage() {
         api.projects.listDeployments(id)
       ]);
       setProject(projData);
+      
+      // Set default build_method if not present
+      if (!confData.build_method) {
+        confData.build_method = 'dockerfile';
+      }
       setConfig(confData);
       setDeployments(deploysData);
       
@@ -221,14 +226,81 @@ export function ProjectDetailPage() {
               {project.workload_type === 'web_service' ? (
                 <>
                   <div className="form-group">
-                    <label>Dockerfile Path</label>
-                    <input 
-                      type="text" 
-                      value={config.dockerfile_path || ''} 
-                      onChange={(e) => setConfig({...config, dockerfile_path: e.target.value})}
-                      placeholder="Dockerfile"
-                    />
+                    <label>Build Method</label>
+                    <div className="radio-group">
+                      <label className="radio-option">
+                        <input 
+                          type="radio" 
+                          name="build_method" 
+                          value="dockerfile"
+                          checked={config.build_method === 'dockerfile'}
+                          onChange={(e) => setConfig({...config, build_method: e.target.value})}
+                        />
+                        <span>Dockerfile</span>
+                        <small>Build using an existing Dockerfile in your repository</small>
+                      </label>
+                      <label className="radio-option">
+                        <input 
+                          type="radio" 
+                          name="build_method" 
+                          value="buildpack"
+                          checked={config.build_method === 'buildpack'}
+                          onChange={(e) => setConfig({...config, build_method: e.target.value})}
+                        />
+                        <span>Build Commands</span>
+                        <small>Automatically generate a Dockerfile from build and start commands</small>
+                      </label>
+                    </div>
                   </div>
+
+                  {config.build_method === 'dockerfile' ? (
+                    <>
+                      <div className="form-group">
+                        <label>Dockerfile Path</label>
+                        <input 
+                          type="text" 
+                          value={config.dockerfile_path || ''} 
+                          onChange={(e) => setConfig({...config, dockerfile_path: e.target.value})}
+                          placeholder="Dockerfile"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="form-group">
+                        <label>Install Command</label>
+                        <input 
+                          type="text" 
+                          value={config.install_cmd || ''} 
+                          onChange={(e) => setConfig({...config, install_cmd: e.target.value})}
+                          placeholder="npm install"
+                        />
+                        <small className="field-hint">Command to install dependencies (optional)</small>
+                      </div>
+                      <div className="form-group">
+                        <label>Build Command</label>
+                        <input 
+                          type="text" 
+                          value={config.build_cmd || ''} 
+                          onChange={(e) => setConfig({...config, build_cmd: e.target.value})}
+                          placeholder="npm run build"
+                        />
+                        <small className="field-hint">Command to build your application (optional)</small>
+                      </div>
+                      <div className="form-group">
+                        <label>Start Command</label>
+                        <input 
+                          type="text" 
+                          value={config.start_cmd || ''} 
+                          onChange={(e) => setConfig({...config, start_cmd: e.target.value})}
+                          placeholder="npm start"
+                          required
+                        />
+                        <small className="field-hint">Command to start your application</small>
+                      </div>
+                    </>
+                  )}
+
                   <div className="form-group">
                     <label>Container Port</label>
                     <input 

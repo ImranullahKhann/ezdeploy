@@ -143,12 +143,23 @@ func processDeployJob(
 	_ = deployService.AddEvent(ctx, deploymentID, "build_started", "Starting build...", nil)
 
 	// 1. Build
+	containerPort := 8080
+	if conf.Port != nil {
+		containerPort = *conf.Port
+	}
+	
 	buildOpts := build.BuildOptions{
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,
 		RepoURL:        proj.GitRepoURL,
 		Branch:         proj.Branch,
 		DockerfilePath: getString(conf.DockerfilePath),
+		BuildMethod:    conf.BuildMethod,
+		BuildCmd:       getString(conf.BuildCmd),
+		StartCmd:       getString(conf.StartCmd),
+		InstallCmd:     getString(conf.InstallCmd),
+		Port:           containerPort,
+		EnvVars:        conf.EnvVars,
 		LogWriter:      os.Stdout, // In Phase 8 we will redirect this to a dedicated log service
 	}
 	if dep.GitBranch != nil {
@@ -181,11 +192,6 @@ func processDeployJob(
 			_ = deployService.AddEvent(ctx, deploymentID, "deployment_failed", "failed to allocate port: "+err.Error(), nil)
 			return fmt.Errorf("allocate port: %w", err)
 		}
-	}
-
-	containerPort := 8080
-	if conf.Port != nil {
-		containerPort = *conf.Port
 	}
 
 	startOpts := runtime.StartOptions{

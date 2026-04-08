@@ -27,6 +27,12 @@ type BuildOptions struct {
 	Branch         string
 	CommitSHA      string
 	DockerfilePath string // relative to repo root
+	BuildMethod    string // "dockerfile" or "buildpack"
+	BuildCmd       string
+	StartCmd       string
+	InstallCmd     string
+	Port           int
+	EnvVars        map[string]interface{}
 	LogWriter      io.Writer
 }
 
@@ -44,8 +50,18 @@ func (s *Service) Build(ctx context.Context, opts BuildOptions) (string, error) 
 
 	// 2. Build Docker image
 	imageTag := fmt.Sprintf("ezdeploy-%s:%s", opts.ProjectID, opts.DeploymentID)
-	if err := s.dockerBuild(ctx, opts, buildDir, imageTag); err != nil {
-		return "", err
+	
+	// Choose build method based on configuration
+	if opts.BuildMethod == "buildpack" {
+		// Build using commands - generate Dockerfile
+		if err := s.buildFromCommands(ctx, opts, buildDir, imageTag); err != nil {
+			return "", err
+		}
+	} else {
+		// Build using Dockerfile (default)
+		if err := s.dockerBuild(ctx, opts, buildDir, imageTag); err != nil {
+			return "", err
+		}
 	}
 
 	return imageTag, nil
@@ -103,4 +119,95 @@ func (s *Service) dockerBuild(ctx context.Context, opts BuildOptions, buildDir, 
 	}
 
 	return nil
+}
+
+func (s *Service) buildFromCommands(ctx context.Context, opts BuildOptions, buildDir, imageTag string) error {
+	fmt.Fprintf(opts.LogWriter, "Building docker image %s from commands...\n", imageTag)
+
+	// Detect base image from project structure
+	baseImage := s.detectBaseImage(buildDir)
+	fmt.Fprintf(opts.LogWriter, "Detected base image: %s\n", baseImage)
+
+	// Generate a Dockerfile from the build and start commands
+	dockerfileContent := s.generateDockerfile(baseImage, opts)
+	dockerfilePath := filepath.Join(buildDir, "Dockerfile.generated")
+	
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
+		return fmt.Errorf("write generated Dockerfile: %w", err)
+	}
+
+	fmt.Fprintf(opts.LogWriter, "Generated Dockerfile:\n%s\n", dockerfileContent)
+
+	// Build using the generated Dockerfile
+	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", "Dockerfile.generated", ".")
+	cmd.Dir = buildDir
+	cmd.Stdout = opts.LogWriter
+	cmd.Stderr = opts.LogWriter
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker build from commands: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) detectBaseImage(buildDir string) string {
+	// Check for common project files to determine base image
+	if _, err := os.Stat(filepath.Join(buildDir, "package.json")); err == nil {
+		return "node:18-alpine"
+	}
+	if _, err := os.Stat(filepath.Join(buildDir, "requirements.txt")); err == nil {
+		return "python:3.11-slim"
+	}
+	if _, err := os.Stat(filepath.Join(buildDir, "go.mod")); err == nil {
+		return "golang:1.21-alpine"
+	}
+	if _, err := os.Stat(filepath.Join(buildDir, "Gemfile")); err == nil {
+		return "ruby:3.2-slim"
+	}
+	// Default to Node.js as it's most common for web services
+	return "node:18-alpine"
+}
+
+func (s *Service) generateDockerfile(baseImage string, opts BuildOptions) string {
+	dockerfile := fmt.Sprintf("FROM %s\n\n", baseImage)
+	dockerfile += "WORKDIR /app\n\n"
+	
+	// Copy all files
+	dockerfile += "COPY . .\n\n"
+	
+	// Add environment variables if provided
+	if opts.EnvVars != nil && len(opts.EnvVars) > 0 {
+		dockerfile += "# Environment Variables\n"
+		for key, value := range opts.EnvVars {
+			dockerfile += fmt.Sprintf("ENV %s=%v\n", key, value)
+		}
+		dockerfile += "\n"
+	}
+	
+	// Install dependencies if install command is provided
+	if opts.InstallCmd != "" {
+		dockerfile += fmt.Sprintf("# Install dependencies\nRUN %s\n\n", opts.InstallCmd)
+	}
+	
+	// Run build command if provided
+	if opts.BuildCmd != "" {
+		dockerfile += fmt.Sprintf("# Build application\nRUN %s\n\n", opts.BuildCmd)
+	}
+	
+	// Expose port
+	port := opts.Port
+	if port == 0 {
+		port = 8080
+	}
+	dockerfile += fmt.Sprintf("EXPOSE %d\n\n", port)
+	
+	// Set start command
+	startCmd := opts.StartCmd
+	if startCmd == "" {
+		startCmd = "npm start" // default
+	}
+	dockerfile += fmt.Sprintf("CMD %s\n", startCmd)
+	
+	return dockerfile
 }

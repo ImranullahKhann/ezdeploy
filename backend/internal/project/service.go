@@ -192,10 +192,11 @@ func (s *Service) UpdateConfig(ctx context.Context, userID, projectID string, co
 
 	query := `
 		INSERT INTO project_configs (
-			project_id, build_cmd, start_cmd, dockerfile_path, output_dir,
+			project_id, build_method, build_cmd, start_cmd, dockerfile_path, output_dir,
 			install_cmd, port, healthcheck_path, env_vars
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (project_id) DO UPDATE SET
+			build_method = EXCLUDED.build_method,
 			build_cmd = EXCLUDED.build_cmd,
 			start_cmd = EXCLUDED.start_cmd,
 			dockerfile_path = EXCLUDED.dockerfile_path,
@@ -205,17 +206,17 @@ func (s *Service) UpdateConfig(ctx context.Context, userID, projectID string, co
 			healthcheck_path = EXCLUDED.healthcheck_path,
 			env_vars = EXCLUDED.env_vars,
 			updated_at = NOW()
-		RETURNING project_id, build_cmd, start_cmd, dockerfile_path, output_dir,
+		RETURNING project_id, build_method, build_cmd, start_cmd, dockerfile_path, output_dir,
 			install_cmd, port, healthcheck_path, env_vars, created_at, updated_at
 	`
 
 	var c ProjectConfig
 	var envVarsRaw []byte
 	err = s.pool.QueryRow(ctx, query,
-		projectID, config.BuildCmd, config.StartCmd, config.DockerfilePath,
+		projectID, config.BuildMethod, config.BuildCmd, config.StartCmd, config.DockerfilePath,
 		config.OutputDir, config.InstallCmd, config.Port, config.HealthcheckPath, envVarsJSON,
 	).Scan(
-		&c.ProjectID, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
+		&c.ProjectID, &c.BuildMethod, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
 		&c.InstallCmd, &c.Port, &c.HealthcheckPath, &envVarsRaw, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
@@ -237,7 +238,7 @@ func (s *Service) GetConfig(ctx context.Context, userID, projectID string) (Proj
 	}
 
 	query := `
-		SELECT project_id, build_cmd, start_cmd, dockerfile_path, output_dir,
+		SELECT project_id, build_method, build_cmd, start_cmd, dockerfile_path, output_dir,
 			install_cmd, port, healthcheck_path, env_vars, created_at, updated_at
 		FROM project_configs
 		WHERE project_id = $1
@@ -246,7 +247,7 @@ func (s *Service) GetConfig(ctx context.Context, userID, projectID string) (Proj
 	var c ProjectConfig
 	var envVarsRaw []byte
 	err := s.pool.QueryRow(ctx, query, projectID).Scan(
-		&c.ProjectID, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
+		&c.ProjectID, &c.BuildMethod, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
 		&c.InstallCmd, &c.Port, &c.HealthcheckPath, &envVarsRaw, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {
@@ -288,7 +289,7 @@ func (s *Service) GetByIDInternal(ctx context.Context, projectID string) (Projec
 
 func (s *Service) GetConfigInternal(ctx context.Context, projectID string) (ProjectConfig, error) {
 	query := `
-		SELECT project_id, build_cmd, start_cmd, dockerfile_path, output_dir,
+		SELECT project_id, build_method, build_cmd, start_cmd, dockerfile_path, output_dir,
 			install_cmd, port, healthcheck_path, env_vars, created_at, updated_at
 		FROM project_configs
 		WHERE project_id = $1
@@ -297,7 +298,7 @@ func (s *Service) GetConfigInternal(ctx context.Context, projectID string) (Proj
 	var c ProjectConfig
 	var envVarsRaw []byte
 	err := s.pool.QueryRow(ctx, query, projectID).Scan(
-		&c.ProjectID, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
+		&c.ProjectID, &c.BuildMethod, &c.BuildCmd, &c.StartCmd, &c.DockerfilePath, &c.OutputDir,
 		&c.InstallCmd, &c.Port, &c.HealthcheckPath, &envVarsRaw, &c.CreatedAt, &c.UpdatedAt,
 	)
 	if err != nil {

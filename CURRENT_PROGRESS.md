@@ -30,6 +30,13 @@
     - Configuration management for Web Services and Static Sites (build/start commands, ports, paths).
     - Secrets management (Environment Variables) with masked inputs.
     - One-click deployment triggering and direct access to live URLs.
+- Flexible build system for web services:
+    - Build method selection: Dockerfile or Build Commands (buildpack-style).
+    - Dockerfile method: uses existing Dockerfile in repository (default behavior).
+    - Build Commands method: auto-generates Dockerfile from install/build/start commands.
+    - Automatic base image detection from project structure (Node.js, Python, Go, Ruby).
+    - Dynamic Dockerfile generation with support for multi-stage builds, environment variables, and custom commands.
+    - UI with radio button selection and conditional field rendering based on build method.
 
 ## Progress vs Build Plan
 

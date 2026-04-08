@@ -22,6 +22,7 @@ export interface Project {
 
 export interface ProjectConfig {
   project_id: string;
+  build_method: string;
   build_cmd?: string | null;
   start_cmd?: string | null;
   dockerfile_path?: string | null;
