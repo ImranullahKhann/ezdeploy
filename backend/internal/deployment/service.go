@@ -143,15 +143,16 @@ func (s *Service) AllocatePort(ctx context.Context, min, max int) (int, error) {
 	return port, nil
 }
 
-func (s *Service) UpdateMetadata(ctx context.Context, deploymentID string, containerID *string, port *int, publicURL *string) error {
+func (s *Service) UpdateMetadata(ctx context.Context, deploymentID string, containerID *string, port *int, publicURL *string, artifactPath *string) error {
 	query := `
 		UPDATE deployments 
 		SET runtime_container_id = COALESCE($2, runtime_container_id),
 		    port = COALESCE($3, port),
-		    public_url = COALESCE($4, public_url)
+		    public_url = COALESCE($4, public_url),
+		    artifact_path = COALESCE($5, artifact_path)
 		WHERE id = $1
 	`
-	_, err := s.pool.Exec(ctx, query, deploymentID, containerID, port, publicURL)
+	_, err := s.pool.Exec(ctx, query, deploymentID, containerID, port, publicURL, artifactPath)
 	if err != nil {
 		return fmt.Errorf("update deployment metadata: %w", err)
 	}
@@ -236,6 +237,31 @@ func (s *Service) ListEvents(ctx context.Context, deploymentID string) ([]Deploy
 	}
 
 	return events, nil
+}
+
+func (s *Service) GetLatestRunningByProject(ctx context.Context, projectID string) (Deployment, error) {
+	query := `
+		SELECT id, project_id, git_commit_sha, git_branch, status, source_type, artifact_path, 
+		       runtime_container_id, port, public_url, created_at, started_at, finished_at, created_by_user_id
+		FROM deployments
+		WHERE project_id = $1 AND status = 'running' AND artifact_path IS NOT NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var d Deployment
+	err := s.pool.QueryRow(ctx, query, projectID).Scan(
+		&d.ID, &d.ProjectID, &d.GitCommitSHA, &d.GitBranch, &d.Status, &d.SourceType, &d.ArtifactPath,
+		&d.RuntimeContainerID, &d.Port, &d.PublicURL, &d.CreatedAt, &d.StartedAt, &d.FinishedAt, &d.CreatedByUserID,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Deployment{}, ErrNotFound
+		}
+		return Deployment{}, fmt.Errorf("get latest running deployment: %w", err)
+	}
+
+	return d, nil
 }
 
 // Job Queue implementation

@@ -37,6 +37,12 @@
     - Automatic base image detection from project structure (Node.js, Python, Go, Ruby).
     - Dynamic Dockerfile generation with support for multi-stage builds, environment variables, and custom commands.
     - UI with radio button selection and conditional field rendering based on build method.
+- Static site deployment path is fully functional:
+    - Static build pipeline: automated `npm install`, `npm run build` (or custom commands) and output directory capture.
+    - Immutable artifact storage for static sites.
+    - Atomic deployment switching for static sites.
+    - Built-in static file server in the API with SPA support (index.html fallback).
+    - Automatic public URL generation for static sites.
 
 ## Progress vs Build Plan
 
@@ -47,4 +53,5 @@
 - Phase 4: complete.
 - Phase 5: complete.
 - Phase 6: complete.
-- Next up: Phase 7 static site deployment path.
+- Phase 7: complete.
+- Next up: Phase 8 logs, events, and status pages.

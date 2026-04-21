@@ -6,6 +6,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,10 +26,12 @@ type Handler struct {
 	authService    *auth.Service
 	projectService *project.Service
 	deployService  *deployment.Service
+	storageRoot    string
+	mux            *http.ServeMux
 }
 
-func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
-	h := &Handler{pool: pool, authService: authService}
+func New(pool *pgxpool.Pool, authService *auth.Service, storageRoot string) http.Handler {
+	h := &Handler{pool: pool, authService: authService, storageRoot: storageRoot}
 	
 	projectService, err := project.New(pool)
 	if err == nil {
@@ -41,6 +46,7 @@ func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.handleHealth)
 	mux.HandleFunc("/readyz", h.handleReady)
+	mux.HandleFunc("/sites/", h.handleStaticSite)
 	if authService != nil {
 		mux.HandleFunc("/auth/signup", h.handleSignup)
 		mux.HandleFunc("/auth/login", h.handleLogin)
@@ -56,7 +62,46 @@ func New(pool *pgxpool.Pool, authService *auth.Service) http.Handler {
 			mux.Handle("/deployments/", middleware.RequireAuth(authService, http.HandlerFunc(h.handleDeploymentByID)))
 		}
 	}
-	return mux
+	h.mux = mux
+	return h
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 1. Check if mux has a match
+	_, pattern := h.mux.Handler(r)
+	if pattern != "" {
+		h.mux.ServeHTTP(w, r)
+		return
+	}
+
+	// 2. 404 detected. Try Referer-based redirection for static site assets.
+	// This helps SPAs that use absolute paths (e.g. /assets/js) when served from a subpath (/sites/prj_123/).
+	referer := r.Header.Get("Referer")
+	if referer != "" && strings.Contains(referer, "/sites/") {
+		if refURL, err := url.Parse(referer); err == nil && strings.HasPrefix(refURL.Path, "/sites/") {
+			// Extract project ID from referer path
+			refPath := strings.TrimPrefix(refURL.Path, "/sites/")
+			parts := strings.Split(refPath, "/")
+			if len(parts) > 0 && parts[0] != "" {
+				projectID := parts[0]
+				
+				// Avoid infinite redirect loops if something went wrong
+				if strings.HasPrefix(r.URL.Path, "/sites/") {
+					http.NotFound(w, r)
+					return
+				}
+
+				// Redirect to the correct subpath: /sites/<projectID>/<original_path>
+				// Use a clean path to avoid double slashes
+				newPath := "/sites/" + projectID + "/" + strings.TrimPrefix(r.URL.Path, "/")
+				http.Redirect(w, r, newPath, http.StatusTemporaryRedirect)
+				return
+			}
+		}
+	}
+
+	// 3. Final fallback
+	http.NotFound(w, r)
 }
 
 type authRequest struct {
@@ -644,6 +689,93 @@ func (h *Handler) handleListDeploymentEvents(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, eventListResponse{Events: events})
 }
 
+
+func (h *Handler) handleStaticSite(w http.ResponseWriter, r *http.Request) {
+	// URL format: /sites/<project_id>/<file_path>
+	path := strings.TrimPrefix(r.URL.Path, "/sites/")
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	parts := strings.SplitN(path, "/", 2)
+	projectID := parts[0]
+	
+	remainingPath := ""
+	if len(parts) > 1 {
+		remainingPath = parts[1]
+	}
+
+	// Find the latest running deployment for this project
+	dep, err := h.deployService.GetLatestRunningByProject(r.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, deployment.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if dep.ArtifactPath == nil {
+		http.NotFound(w, r)
+		return
+	}
+	artifactPath := *dep.ArtifactPath
+
+	// Base path for this project's static sites
+	projectBase := "/sites/" + projectID
+
+	// Redirect if missing trailing slash on the base path to ensure relative assets resolve correctly
+	if r.URL.Path == projectBase {
+		http.Redirect(w, r, projectBase+"/", http.StatusMovedPermanently)
+		return
+	}
+
+	// Calculate the file path relative to the artifact root
+	fullPath := filepath.Join(artifactPath, remainingPath)
+	
+	// Check if file or directory exists
+	fi, err := os.Stat(fullPath)
+	
+	if err == nil && !fi.IsDir() {
+		// If it's index.html, serve with base tag injection
+		if filepath.Base(fullPath) == "index.html" {
+			h.serveIndexWithBase(w, r, fullPath, projectBase+"/")
+			return
+		}
+		// Serve any other existing file directly
+		http.ServeFile(w, r, fullPath)
+		return
+	}
+
+	// If it's a directory that exists, ensure trailing slash and serve index.html
+	if err == nil && fi.IsDir() {
+		if !strings.HasSuffix(r.URL.Path, "/") {
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+			return
+		}
+		indexFile := filepath.Join(fullPath, "index.html")
+		h.serveIndexWithBase(w, r, indexFile, projectBase+"/")
+		return
+	}
+
+	http.NotFound(w, r)
+}
+
+func (h *Handler) serveIndexWithBase(w http.ResponseWriter, r *http.Request, path, base string) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	html := string(content)
+	
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, html)
+}
 
 func handleProjectError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError

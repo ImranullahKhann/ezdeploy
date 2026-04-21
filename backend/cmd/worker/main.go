@@ -123,11 +123,6 @@ func processDeployJob(
 		return fmt.Errorf("get deployment: %w", err)
 	}
 
-	// For the MVP, we assume the user_id isn't needed here if we have projectID
-	// But GetByID in projectService needs userID. 
-	// Let's add a internal GetByID to projectService or just bypass for now since worker is internal.
-	// Actually, I'll just use a raw query here to get project info for simplicity in the worker.
-	
 	proj, err := projectService.GetByIDInternal(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
@@ -158,6 +153,7 @@ func processDeployJob(
 		BuildCmd:       getString(conf.BuildCmd),
 		StartCmd:       getString(conf.StartCmd),
 		InstallCmd:     getString(conf.InstallCmd),
+		OutputDir:      getString(conf.OutputDir),
 		Port:           containerPort,
 		EnvVars:        conf.EnvVars,
 		LogWriter:      os.Stdout, // In Phase 8 we will redirect this to a dedicated log service
@@ -167,6 +163,38 @@ func processDeployJob(
 	}
 	if dep.GitCommitSHA != nil {
 		buildOpts.CommitSHA = *dep.GitCommitSHA
+	}
+
+	if proj.WorkloadType == "static_site" {
+		// Inject PUBLIC_URL and VITE_BASE_URL for static sites so they can build with the correct subpath.
+		// This is used by many build tools (like Vite, Create React App) to set the base path.
+		if buildOpts.EnvVars == nil {
+			buildOpts.EnvVars = make(map[string]any)
+		}
+		subpath := fmt.Sprintf("/sites/%s/", projectID)
+		buildOpts.EnvVars["PUBLIC_URL"] = subpath
+		buildOpts.EnvVars["VITE_BASE_URL"] = subpath
+		buildOpts.EnvVars["BASE_URL"] = subpath
+
+		artifactPath, err := buildService.BuildStatic(ctx, buildOpts)
+		if err != nil {
+			_ = deployService.UpdateStatus(ctx, deploymentID, deployment.StatusBuildFailed)
+			_ = deployService.AddEvent(ctx, deploymentID, "build_failed", err.Error(), nil)
+			return fmt.Errorf("build static: %w", err)
+		}
+
+		_ = deployService.AddEvent(ctx, deploymentID, "build_finished", "Build successful", nil)
+		_ = deployService.UpdateStatus(ctx, deploymentID, deployment.StatusRunning)
+
+		publicURL := fmt.Sprintf("/sites/%s/", projectID)
+		_ = deployService.UpdateMetadata(ctx, deploymentID, nil, nil, &publicURL, &artifactPath)
+
+		_ = deployService.AddEvent(ctx, deploymentID, "deployment_ready", "Static site is live", map[string]any{
+			"artifact_path": artifactPath,
+			"public_url":    publicURL,
+		})
+
+		return nil
 	}
 
 	imageTag, err := buildService.Build(ctx, buildOpts)
@@ -224,7 +252,7 @@ func processDeployJob(
 	containerName = strings.ReplaceAll(containerName, "_", "-")
 	
 	publicURL := fmt.Sprintf("http://localhost:%d", hostPort)
-	_ = deployService.UpdateMetadata(ctx, deploymentID, &containerID, &hostPort, &publicURL)
+	_ = deployService.UpdateMetadata(ctx, deploymentID, &containerID, &hostPort, &publicURL, nil)
 
 	_ = deployService.AddEvent(ctx, deploymentID, "container_started", "Container started, waiting for health check...", map[string]any{
 		"container_id":   containerID,

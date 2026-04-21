@@ -31,6 +31,7 @@ type BuildOptions struct {
 	BuildCmd       string
 	StartCmd       string
 	InstallCmd     string
+	OutputDir      string
 	Port           int
 	EnvVars        map[string]interface{}
 	LogWriter      io.Writer
@@ -65,6 +66,79 @@ func (s *Service) Build(ctx context.Context, opts BuildOptions) (string, error) 
 	}
 
 	return imageTag, nil
+}
+
+func (s *Service) BuildStatic(ctx context.Context, opts BuildOptions) (string, error) {
+	buildDir := filepath.Join(s.storageRoot, "builds", opts.DeploymentID)
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return "", fmt.Errorf("create build dir: %w", err)
+	}
+	defer os.RemoveAll(buildDir)
+
+	// 1. Clone repo
+	if err := s.cloneRepo(ctx, opts, buildDir); err != nil {
+		return "", err
+	}
+
+	// 2. Build Docker image that performs the build
+	imageTag := fmt.Sprintf("ezdeploy-static-build-%s:%s", opts.ProjectID, opts.DeploymentID)
+	containerName := fmt.Sprintf("ezdeploy-static-container-%s", opts.DeploymentID)
+
+	// Detect base image from project structure
+	baseImage := s.detectBaseImage(buildDir)
+	fmt.Fprintf(opts.LogWriter, "Using base image for build: %s\n", baseImage)
+
+	// Generate a Dockerfile from the build commands
+	dockerfileContent := s.generateDockerfile(baseImage, opts)
+	dockerfilePath := filepath.Join(buildDir, "Dockerfile.static")
+	
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
+		return "", fmt.Errorf("write generated Dockerfile: %w", err)
+	}
+
+	fmt.Fprintf(opts.LogWriter, "Building static artifacts in container %s...\n", imageTag)
+
+	// Build the image (this runs the RUN commands inside the container)
+	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageTag, "-f", "Dockerfile.static", ".")
+	cmd.Dir = buildDir
+	cmd.Stdout = opts.LogWriter
+	cmd.Stderr = opts.LogWriter
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("docker build static: %w", err)
+	}
+
+	// 3. Extract output directory from the container
+	outputDir := opts.OutputDir
+	if outputDir == "" {
+		outputDir = "dist" // default
+	}
+
+	artifactDir := filepath.Join(s.storageRoot, "static-sites", opts.ProjectID, opts.DeploymentID)
+	if err := os.MkdirAll(artifactDir, 0755); err != nil {
+		return "", fmt.Errorf("create artifact dir: %w", err)
+	}
+
+	fmt.Fprintf(opts.LogWriter, "Extracting artifacts from %s to %s...\n", outputDir, artifactDir)
+
+	// Create a temporary container to copy files from it
+	createCmd := exec.CommandContext(ctx, "docker", "create", "--name", containerName, imageTag)
+	if err := createCmd.Run(); err != nil {
+		return "", fmt.Errorf("docker create for extraction: %w", err)
+	}
+	defer func() {
+		// Cleanup: remove container and image
+		_ = exec.Command("docker", "rm", "-f", containerName).Run()
+		_ = exec.Command("docker", "rmi", imageTag).Run()
+	}()
+
+	// Copy the output directory from the container to the host artifact directory
+	// Note: docker cp <container>:<src>/. <dest> copies contents correctly
+	cpCmd := exec.CommandContext(ctx, "docker", "cp", fmt.Sprintf("%s:/app/%s/.", containerName, outputDir), artifactDir)
+	if err := cpCmd.Run(); err != nil {
+		return "", fmt.Errorf("docker cp static artifacts: %w", err)
+	}
+
+	return artifactDir, nil
 }
 
 func (s *Service) cloneRepo(ctx context.Context, opts BuildOptions, buildDir string) error {

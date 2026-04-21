@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	AppBaseURL      string
 	BackendPort     string
 	DatabaseURL     string
 	LogLevel        string
@@ -24,6 +25,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		AppBaseURL:      getEnv("APP_BASE_URL", "http://localhost:8080"),
 		BackendPort:     getEnv("BACKEND_PORT", "8080"),
 		DatabaseURL:     os.Getenv("DATABASE_URL"),
 		LogLevel:        getEnv("LOG_LEVEL", "info"),

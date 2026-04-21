@@ -55,7 +55,7 @@ func run(parent context.Context) error {
 		return err
 	}
 
-	handler := httpapi.New(pool, authService)
+	handler := httpapi.New(pool, authService, cfg.StorageRoot)
 	corsHandler := middleware.CORS(cfg.CORSOrigins)(handler)
 	
 	server := &http.Server{

@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { api, Project, ProjectConfig, Deployment, DeploymentEvent, APIError } from '../api/client';
+import { api, Project, ProjectConfig, Deployment, DeploymentEvent, APIError, API_BASE } from '../api/client';
 import { Navigation } from '../components/Navigation';
 
 export function ProjectDetailPage() {
@@ -394,9 +394,20 @@ export function ProjectDetailPage() {
                   {latestDeployment.status === 'running' && latestDeployment.public_url && (
                     <div className="public-url-box">
                       <label>Public URL</label>
-                      <a href={latestDeployment.public_url} target="_blank" rel="noopener noreferrer">
-                        {latestDeployment.public_url} ↗
-                      </a>
+                      {(() => {
+                        const baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+                        const publicPath = latestDeployment.public_url.startsWith('/') 
+                          ? latestDeployment.public_url 
+                          : `/${latestDeployment.public_url}`;
+                        const fullUrl = latestDeployment.public_url.startsWith('http') 
+                          ? latestDeployment.public_url 
+                          : `${baseUrl}${publicPath}`;
+                        return (
+                          <a href={fullUrl} target="_blank" rel="noopener noreferrer">
+                            {fullUrl} ↗
+                          </a>
+                        );
+                      })()}
                     </div>
                   )}
                   <div className="deployment-meta">
