@@ -539,6 +539,7 @@ body {
   border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.2s;
+  gap: 0.5rem;
 }
 
 .radio-option:hover {
@@ -560,14 +561,12 @@ body {
 .radio-option span {
   display: block;
   font-weight: 500;
-  margin-bottom: 0.25rem;
 }
 
 .radio-option small {
   display: block;
   color: #6b7280;
   font-size: 0.875rem;
-  margin-top: 0.25rem;
 }
 
 .field-hint {
